@@ -1,4 +1,4 @@
-use bevy::{prelude::*, sprite::collide_aabb::collide};
+use bevy::{prelude::*, sprite::collide_aabb::collide, time};
 
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
 const GROUND_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
@@ -53,7 +53,7 @@ fn ground(mut commands: Commands) {
             ..default()
         },
         transform: Transform {
-            translation: Vec3::new(0., -400., 0.),
+            translation: Vec3::new(0., -300., 0.),
             scale: Vec3::new(GROUND_SIZE_X, GROUND_SIZE_Y, 0.),
             ..default()
         },
@@ -76,8 +76,8 @@ fn player_controller(
         if keyboard_input.pressed(KeyCode::Down) {
             transform.translation.y -= 5.;
         }
-        if keyboard_input.pressed(KeyCode::Up) {
-            transform.translation.y += 5.;
+        if keyboard_input.just_pressed(KeyCode::Up) {
+            transform.translation.y = -20.;
         }
     }
 }
@@ -89,7 +89,7 @@ fn gravity(mut player_positions: Query<&mut Transform, With<Player>>) {
 }
 
 fn collision_detection(
-    ground: Query<&Transform, With<Ground>>,
+    ground: Query<&Transform, (With<Ground>, Without<Player>)>,
     mut player: Query<&mut Transform, With<Player>>
 ) {
     let player_size = Vec2::new(PLAYER_SIZE_X, PLAYER_SIZE_Y);
