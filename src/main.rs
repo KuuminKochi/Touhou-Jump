@@ -1,4 +1,4 @@
-use bevy::{prelude::*, sprite::collide_aabb::collide, time};
+use bevy::{prelude::*, sprite::collide_aabb::collide};
 
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
 const GROUND_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
@@ -19,6 +19,7 @@ fn main() {
         .add_startup_system(setup)
         .add_startup_system(player_sprite)
         .add_startup_system(ground)
+        .add_startup_system(access_window_system)
         .add_system(player_controller)
         .add_system(gravity)
         .add_system(collision_detection)
@@ -30,6 +31,14 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     commands.spawn_bundle(Camera2dBundle::default());
+}
+
+fn access_window_system(mut windows: ResMut<Windows>){
+    for window in windows.iter_mut() {
+        window.set_title(String::from("Touhou Jump"));
+        window.set_resolution(1280., 960.);
+        window.set_resizable(false);
+    }
 }
 
 fn player_sprite(mut commands: Commands, asset_server: Res<AssetServer>) {
