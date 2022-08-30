@@ -40,16 +40,16 @@ fn player_controller(
 ) {
     for mut transform in player_positions.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= 2.;
+            transform.translation.x -= 5.;
         }
         if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += 2.;
+            transform.translation.x += 5.;
         }
         if keyboard_input.pressed(KeyCode::Down) {
-            transform.translation.y -= 2.;
+            transform.translation.y -= 5.;
         }
         if keyboard_input.pressed(KeyCode::Up) {
-            transform.translation.y += 2.;
+            transform.translation.y += 5.;
         }
-    }
+    } 
 }
