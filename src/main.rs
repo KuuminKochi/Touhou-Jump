@@ -1,14 +1,16 @@
-use bevy::{prelude::*, sprite::collide_aabb::collide, time::{Stopwatch}};
+use bevy::{
+    input::keyboard::KeyboardInput, prelude::*, sprite::collide_aabb::collide, time::Stopwatch,
+};
 
 const TIME_SCALE: f32 = 120.;
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
 const GROUND_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 const PLAYER_SPRITE: &str = "satorineutral.png";
-const PLAYER_SIZE_X: f32 = 0.5;
-const PLAYER_SIZE_Y: f32 = 0.5;
+const PLAYER_SIZE_X: f32 = 1.;
+const PLAYER_SIZE_Y: f32 = 1.;
 const GROUND_SIZE_X: f32 = 1500.;
-const GROUND_SIZE_Y: f32 = 100.;
-const GRAVITY: f32 = 5.;
+const GROUND_SIZE_Y: f32 = 300.;
+const GRAVITY: f32 = 10.;
 
 #[derive(Component)]
 struct JumpDuration {
@@ -17,7 +19,7 @@ struct JumpDuration {
 #[derive(Component)]
 struct PlayerStatus {
     on_ground: bool,
-    jumping: bool,
+    is_jump: bool,
 }
 #[derive(Component)]
 struct Player;
@@ -55,26 +57,24 @@ fn access_window_system(mut windows: ResMut<Windows>) {
 }
 
 fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
-
     commands
         .spawn_bundle(SpriteBundle {
             texture: asset_server.load(PLAYER_SPRITE),
             transform: Transform {
                 translation: Vec3::new(0.0, 0.0, 0.0),
-                scale: Vec3::new(PLAYER_SIZE_X, PLAYER_SIZE_Y, 0.0),
+                scale: Vec3::new(0.5, 0.5, 0.0),
                 ..default()
-            }, 
+            },
             ..default()
         })
         .insert(Player)
-        .insert(PlayerStatus{
+        .insert(PlayerStatus {
             on_ground: false,
-            jumping: false
+            is_jump: false,
         })
         .insert(JumpDuration {
-            time: Stopwatch::new()
+            time: Stopwatch::new(),
         });
-
 }
 
 fn ground(mut commands: Commands) {
@@ -85,7 +85,7 @@ fn ground(mut commands: Commands) {
                 ..default()
             },
             transform: Transform {
-                translation: Vec3::new(0., -350., 0.),
+                translation: Vec3::new(0., -250., 0.),
                 scale: Vec3::new(GROUND_SIZE_X, GROUND_SIZE_Y, 0.),
                 ..default()
             },
@@ -100,10 +100,10 @@ fn player_controller(
 ) {
     for mut transform in player_positions.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= 5.;
+            transform.translation.x -= 15.;
         }
         if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += 5.;
+            transform.translation.x += 15.;
         }
     }
 }
@@ -112,31 +112,32 @@ fn jump(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
     mut player: Query<(&mut Transform, &mut PlayerStatus), With<Player>>,
-    mut jump: Query<&mut JumpDuration, With<Player>>, 
+    mut jump: Query<&mut JumpDuration, With<Player>>,
 ) {
-    let mut player_velocity_y: f32 = 30.;
+    let mut player_velocity: f32 = 20.;
     let mut jump = jump.single_mut();
 
-    for (mut transform, mut status) in player.iter_mut() {
+    for (mut transform, mut status) in player.iter_mut() { 
+
         if keyboard_input.just_pressed(KeyCode::Up) {
-            jump.time.reset()
+            if status.on_ground {
+            status.is_jump = true;
+            jump.time.reset();
+            }
         }
-        if keyboard_input.pressed(KeyCode::Up) {
-            jump.time.tick(time.delta());
-            println!("{}", jump.time.elapsed_secs());
-            if jump.time.elapsed_secs() <= 0.3{
-                transform.translation.y += player_velocity_y;
-                status.jumping = true;
-                if status.on_ground == false && status.jumping == true{
-                    if jump.time.elapsed_secs() > 0.3 {
-                        player_velocity_y = 0.;
-                    } 
+
+            if status.is_jump {
+                jump.time.tick(time.delta());
+                if jump.time.elapsed_secs() < 0.2 {
+                    transform.translation.y += player_velocity * time.delta_seconds_f64() as f32 * TIME_SCALE;
+                    println!("{}", jump.time.elapsed_secs());
+                } else {
+                    status.is_jump = false;
+                    player_velocity = -20.;
                 }
             }
-
         }
     }
-}
 
 fn gravity(time: Res<Time>, mut player_positions: Query<&mut Transform, With<Player>>) {
     for mut transform in player_positions.iter_mut() {
@@ -159,8 +160,7 @@ fn collision_detection(
                 player_size,
                 ground.translation,
                 ground_size,
-            )
-            .is_some()
+            ).is_some()
             {
                 status.on_ground = true
             } else {
@@ -170,7 +170,6 @@ fn collision_detection(
             if status.on_ground {
                 player.translation.y += GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
             }
-
         }
     }
 }
