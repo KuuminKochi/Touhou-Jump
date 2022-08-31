@@ -1,4 +1,4 @@
-use bevy::{prelude::*, sprite::collide_aabb::collide, time::Stopwatch};
+use bevy::{prelude::*, sprite::collide_aabb::collide, time::{Stopwatch}};
 
 const TIME_SCALE: f32 = 120.;
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
@@ -17,6 +17,7 @@ struct JumpDuration {
 #[derive(Component)]
 struct PlayerStatus {
     on_ground: bool,
+    jumping: bool,
 }
 #[derive(Component)]
 struct Player;
@@ -26,7 +27,7 @@ struct Ground;
 fn main() {
     App::new()
         .add_startup_system(setup)
-        .add_startup_system(player_sprite)
+        .add_startup_system(player_spawn)
         .add_startup_system(ground)
         .add_startup_system(access_window_system)
         // .add_system(frame_per_seconds_info)
@@ -53,7 +54,7 @@ fn access_window_system(mut windows: ResMut<Windows>) {
     }
 }
 
-fn player_sprite(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands
         .spawn_bundle(SpriteBundle {
@@ -65,7 +66,14 @@ fn player_sprite(mut commands: Commands, asset_server: Res<AssetServer>) {
             }, 
             ..default()
         })
-        .insert(Player);
+        .insert(Player)
+        .insert(PlayerStatus{
+            on_ground: false,
+            jumping: false
+        })
+        .insert(JumpDuration {
+            time: Stopwatch::new()
+        });
 
 }
 
@@ -103,23 +111,29 @@ fn player_controller(
 fn jump(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
-    mut player: Query<(&mut Transform, &PlayerStatus, &mut JumpDuration), With<Player>>,
+    mut player: Query<(&mut Transform, &mut PlayerStatus), With<Player>>,
+    mut jump: Query<&mut JumpDuration, With<Player>>, 
 ) {
-    let mut player_velocity_y: f32 = 20.;
+    let mut player_velocity_y: f32 = 30.;
+    let mut jump = jump.single_mut();
 
-    for (mut transform, status, mut jump) in player.iter_mut() {
+    for (mut transform, mut status) in player.iter_mut() {
         if keyboard_input.just_pressed(KeyCode::Up) {
             jump.time.reset()
         }
         if keyboard_input.pressed(KeyCode::Up) {
-            transform.translation.y += player_velocity_y;
-            println!("Boing");
             jump.time.tick(time.delta());
-            // if jump.time.elapsed_secs() == 0.5 {
-            //     player_velocity_y = 0.;
-            // } else {
-            //     player_velocity_y = 10.
-            // }
+            println!("{}", jump.time.elapsed_secs());
+            if jump.time.elapsed_secs() <= 0.3{
+                transform.translation.y += player_velocity_y;
+                status.jumping = true;
+                if status.on_ground == false && status.jumping == true{
+                    if jump.time.elapsed_secs() > 0.3 {
+                        player_velocity_y = 0.;
+                    } 
+                }
+            }
+
         }
     }
 }
@@ -131,6 +145,7 @@ fn gravity(time: Res<Time>, mut player_positions: Query<&mut Transform, With<Pla
 }
 
 fn collision_detection(
+    time: Res<Time>,
     ground: Query<&Transform, (With<Ground>, Without<Player>)>,
     mut player: Query<(&mut Transform, &mut PlayerStatus), With<Player>>,
 ) {
@@ -138,7 +153,6 @@ fn collision_detection(
     let ground_size = Vec2::new(GROUND_SIZE_X, GROUND_SIZE_Y);
 
     for ground in ground.iter() {
-        println!("Grounded");
         for (mut player, mut status) in player.iter_mut() {
             if collide(
                 player.translation,
@@ -148,14 +162,15 @@ fn collision_detection(
             )
             .is_some()
             {
-                status.on_ground = true;
-                println!("ON GROUND")
+                status.on_ground = true
             } else {
-                status.on_ground = false;
+                status.on_ground = false
             }
+
             if status.on_ground {
-                player.translation.y += GRAVITY;
+                player.translation.y += GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
             }
+
         }
     }
 }
