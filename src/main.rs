@@ -76,7 +76,7 @@ fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
             time: Stopwatch::new(),
         });
 }
-
+//
 fn ground(mut commands: Commands) {
     commands
         .spawn_bundle(SpriteBundle {
