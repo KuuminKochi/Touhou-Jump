@@ -7,7 +7,7 @@ use bevy::{
 // System Constant
 const TIME_STEP: f64 = 1. / 60.;
 const TIME_SCALE: f32 = 120.;
-const GRAVITY: f32 = 10.;
+const GRAVITY: f32 = 5.;
 
 // Entity Constant
 const PLAYERSPEED: f32 = 20.;
@@ -15,15 +15,15 @@ const PLAYERSPEED: f32 = 20.;
 // Color
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
 const GROUND_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
-const PLATFORM_COLOR: Color = Color::rgb(0., 1., 0.);
+const PLAYER_COLOR: Color = Color::rgb(0., 1., 0.);
 
 // Sprite
 const PLAYER_SPRITE: &str = "satorineutral.png";
 
 // Sprite Sizes
-const PLAYER_SIZE_X: f32 = 0.5;
-const PLAYER_SIZE_Y: f32 = 0.5;
-const GROUND_SIZE_X: f32 = 1500.;
+const PLAYER_SIZE_X: f32 = 100.;
+const PLAYER_SIZE_Y: f32 = 100.;
+const GROUND_SIZE_X: f32 = 500.;
 const GROUND_SIZE_Y: f32 = 300.;
 
 #[derive(Component)]
@@ -84,7 +84,11 @@ fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn()
         .insert_bundle(SpriteBundle {
-            texture: asset_server.load(PLAYER_SPRITE),
+            // texture: asset_server.load(PLAYER_SPRITE),
+            sprite: Sprite {
+                color: PLAYER_COLOR,
+                ..default()
+            },
             transform: Transform {
                 translation: Vec3::new(0.0, 500.0, 0.0),
                 scale: Vec3::new(PLAYER_SIZE_X, PLAYER_SIZE_Y, 0.0),
@@ -209,11 +213,11 @@ fn collision_detection(
                     println!("Right");
                 }
                 Collision::Top => {
-                    status.on_ground = true;
                     println!("Top");
+                    status.on_ground = true;
                 }
                 Collision::Bottom => println!("Bottom"),
-                Collision::Inside => status.on_ground = true,
+                Collision::Inside => {},
             }
 
             // Sends a collision event so that other systems can react to the collision
@@ -226,7 +230,6 @@ fn collision_detection(
         if status.on_ground {
             player_transform.translation.y +=
                 GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
-            println!("GROUND");
         }
     }
 }
