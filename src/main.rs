@@ -1,17 +1,24 @@
 use bevy::{
-    input::keyboard::KeyboardInput, prelude::*, sprite::collide_aabb::collide, time::Stopwatch,
+    prelude::*,
+    sprite::collide_aabb::{collide, Collision},
+    time::{FixedTimestep, Stopwatch},
+    transform,
 };
 
+const TIME_STEP: f64 = 1. / 60.;
 const TIME_SCALE: f32 = 120.;
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
 const GROUND_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
+const PLATFORM_COLOR: Color = Color::rgb(0., 1., 0.);
 const PLAYER_SPRITE: &str = "satorineutral.png";
-const PLAYER_SIZE_X: f32 = 1.;
-const PLAYER_SIZE_Y: f32 = 1.;
+const PLAYER_SIZE_X: f32 = 0.5;
+const PLAYER_SIZE_Y: f32 = 0.5;
 const GROUND_SIZE_X: f32 = 1500.;
 const GROUND_SIZE_Y: f32 = 300.;
 const GRAVITY: f32 = 10.;
 
+#[derive(Component)]
+struct Collider;
 #[derive(Component)]
 struct JumpDuration {
     time: Stopwatch,
@@ -26,21 +33,29 @@ struct Player;
 #[derive(Component)]
 struct Ground;
 
+#[derive(Component)]
+struct Platform;
+#[derive(Default)]
+struct CollisionEvent;
+
 fn main() {
     App::new()
         .add_startup_system(setup)
         .add_startup_system(player_spawn)
+        .add_startup_system(platform_spawn)
         .add_startup_system(ground)
         .add_startup_system(access_window_system)
-        // .add_system(frame_per_seconds_info)
-        .add_system(jump)
-        .add_system(player_controller)
-        .add_system(gravity)
-        .add_system(collision_detection)
+        .add_event::<CollisionEvent>()
+        .add_system_set(
+            SystemSet::new()
+                .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
+                .with_system(player_controller)
+                .with_system(gravity)
+                .with_system(collision_detection)
+                .with_system(jump),
+        )
         .add_plugins(DefaultPlugins)
         .insert_resource(ClearColor(BACKGROUND_COLOR))
-        .insert_resource(GRAVITY)
-        .insert_resource(TIME_SCALE)
         .run();
 }
 
@@ -58,11 +73,12 @@ fn access_window_system(mut windows: ResMut<Windows>) {
 
 fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
-        .spawn_bundle(SpriteBundle {
+        .spawn()
+        .insert_bundle(SpriteBundle {
             texture: asset_server.load(PLAYER_SPRITE),
             transform: Transform {
-                translation: Vec3::new(0.0, 0.0, 0.0),
-                scale: Vec3::new(0.5, 0.5, 0.0),
+                translation: Vec3::new(0.0, 500.0, 0.0),
+                scale: Vec3::new(PLAYER_SIZE_X, PLAYER_SIZE_Y, 0.0),
                 ..default()
             },
             ..default()
@@ -74,12 +90,15 @@ fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
         })
         .insert(JumpDuration {
             time: Stopwatch::new(),
-        });
+        })
+        .insert(Player)
+        .insert(Collider);
 }
-//
+
 fn ground(mut commands: Commands) {
     commands
-        .spawn_bundle(SpriteBundle {
+        .spawn()
+        .insert_bundle(SpriteBundle {
             sprite: Sprite {
                 color: GROUND_COLOR,
                 ..default()
@@ -91,9 +110,10 @@ fn ground(mut commands: Commands) {
             },
             ..default()
         })
-        .insert(Ground);
+        .insert(Collider);
 }
 
+// Move player X Translation left and right
 fn player_controller(
     keyboard_input: Res<Input<KeyCode>>,
     mut player_positions: Query<&mut Transform, With<Player>>,
@@ -108,6 +128,7 @@ fn player_controller(
     }
 }
 
+// Add jumping mechanics to the player
 fn jump(
     time: Res<Time>,
     keyboard_input: Res<Input<KeyCode>>,
@@ -117,63 +138,86 @@ fn jump(
     let mut player_velocity: f32 = 20.;
     let mut jump = jump.single_mut();
 
-    for (mut transform, mut status) in player.iter_mut() { 
-
+    for (mut transform, mut status) in player.iter_mut() {
         if keyboard_input.just_pressed(KeyCode::Up) {
+            // Check whether or not the player is on the ground first, if not
+            // lock Jump. if it is, unlock player jump
             if status.on_ground {
-            status.is_jump = true;
-            jump.time.reset();
+                status.is_jump = true;
+                jump.time.reset();
             }
         }
 
-            if status.is_jump {
-                jump.time.tick(time.delta());
-                if jump.time.elapsed_secs() < 0.2 {
-                    transform.translation.y += player_velocity * time.delta_seconds_f64() as f32 * TIME_SCALE;
-                    println!("{}", jump.time.elapsed_secs());
-                } else {
-                    status.is_jump = false;
-                    player_velocity = -20.;
-                }
+        if status.is_jump {
+            // Make sure player jump only lasts for 0.2 seconds before descending
+            jump.time.tick(time.delta());
+            if jump.time.elapsed_secs() < 0.2 {
+                transform.translation.y +=
+                    player_velocity * time.delta_seconds_f64() as f32 * TIME_SCALE;
+                println!("{}", jump.time.elapsed_secs());
+            } else {
+                status.is_jump = false;
+                // Heavier gravity when falling down
+                player_velocity = -10.;
             }
         }
     }
+}
 
 fn gravity(time: Res<Time>, mut player_positions: Query<&mut Transform, With<Player>>) {
     for mut transform in player_positions.iter_mut() {
+        // Basing the gravity off the frame rate
         transform.translation.y -= GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
     }
 }
 
 fn collision_detection(
     time: Res<Time>,
-    ground: Query<&Transform, (With<Ground>, Without<Player>)>,
-    mut player: Query<(&mut Transform, &mut PlayerStatus), With<Player>>,
+    collider_query: Query<(Entity, &Transform), (With<Collider>, Without<Player>)>,
+    mut player_query: Query<(&mut Transform, &mut PlayerStatus), With<Player>>,
+    mut collision_events: EventWriter<CollisionEvent>,
 ) {
-    let player_size = Vec2::new(PLAYER_SIZE_X, PLAYER_SIZE_Y);
-    let ground_size = Vec2::new(GROUND_SIZE_X, GROUND_SIZE_Y);
+    let (mut player_transform, mut status) = player_query.single_mut();
+    let player_size = player_transform.scale.truncate();
 
-    for ground in ground.iter() {
-        for (mut player, mut status) in player.iter_mut() {
-            if collide(
-                player.translation,
-                player_size,
-                ground.translation,
-                ground_size,
-            ).is_some()
-            {
-                status.on_ground = true
-            } else {
-                status.on_ground = false
-            }
+    for (collider_entity, transform) in collider_query.iter() {
+        let collision = collide(
+            player_transform.translation,
+            player_size,
+            transform.translation,
+            transform.scale.truncate(),
+        );
 
-            if status.on_ground {
-                player.translation.y += GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
-            }
+        if let Some(collision) = collision {
+            // Sends a collision event so that other systems can react to the collision
+            collision_events.send_default();
+            status.on_ground = true;
+        } else {
+            status.on_ground = false;
+        }
+        // if the player is on the ground, cancel out the gravity by adding up inverted gravity to existing gravity
+        if status.on_ground {
+            player_transform.translation.y +=
+                GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
+            println!("GROUND");
         }
     }
 }
 
-// fn frame_per_seconds_info(time: Res<Time>) {
-//     info!("{}", time.delta_seconds_f64() as f32 * TIME_SCALE);
-// }
+fn platform_spawn(mut commands: Commands) {
+    // commands
+    //     .spawn()
+    //     .insert_bundle(SpriteBundle {
+    //         sprite: Sprite {
+    //             color: PLATFORM_COLOR,
+    //             ..default()
+    //         },
+    //         transform: Transform {
+    //             translation: Vec3::new(0., 0., 0.),
+    //             scale: Vec3::new(100., 10., 0.),
+    //             ..default()
+    //         },
+    //         ..default()
+    //     })
+    //     .insert(Ground);
+}
