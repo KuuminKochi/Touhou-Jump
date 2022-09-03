@@ -2,20 +2,29 @@ use bevy::{
     prelude::*,
     sprite::collide_aabb::{collide, Collision},
     time::{FixedTimestep, Stopwatch},
-    transform,
 };
 
+// System Constant
 const TIME_STEP: f64 = 1. / 60.;
 const TIME_SCALE: f32 = 120.;
+const GRAVITY: f32 = 10.;
+
+// Entity Constant
+const PLAYERSPEED: f32 = 20.;
+
+// Color
 const BACKGROUND_COLOR: Color = Color::rgb(1., 0.5, 0.5);
 const GROUND_COLOR: Color = Color::rgb(0.7, 0.7, 0.7);
 const PLATFORM_COLOR: Color = Color::rgb(0., 1., 0.);
+
+// Sprite
 const PLAYER_SPRITE: &str = "satorineutral.png";
+
+// Sprite Sizes
 const PLAYER_SIZE_X: f32 = 0.5;
 const PLAYER_SIZE_Y: f32 = 0.5;
 const GROUND_SIZE_X: f32 = 1500.;
 const GROUND_SIZE_Y: f32 = 300.;
-const GRAVITY: f32 = 10.;
 
 #[derive(Component)]
 struct Collider;
@@ -43,7 +52,7 @@ fn main() {
         .add_startup_system(setup)
         .add_startup_system(player_spawn)
         .add_startup_system(platform_spawn)
-        .add_startup_system(ground)
+        .add_startup_system(ground_spawn)
         .add_startup_system(access_window_system)
         .add_event::<CollisionEvent>()
         .add_system_set(
@@ -95,7 +104,7 @@ fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(Collider);
 }
 
-fn ground(mut commands: Commands) {
+fn ground_spawn(mut commands: Commands) {
     commands
         .spawn()
         .insert_bundle(SpriteBundle {
@@ -113,17 +122,17 @@ fn ground(mut commands: Commands) {
         .insert(Collider);
 }
 
-// Move player X Translation left and right
+// Move player X translation left and right
 fn player_controller(
     keyboard_input: Res<Input<KeyCode>>,
     mut player_positions: Query<&mut Transform, With<Player>>,
 ) {
     for mut transform in player_positions.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= 15.;
+            transform.translation.x -= PLAYERSPEED;
         }
         if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += 15.;
+            transform.translation.x += PLAYERSPEED;
         }
     }
 }
@@ -189,12 +198,30 @@ fn collision_detection(
         );
 
         if let Some(collision) = collision {
+            // Check what type of collisions we're dealing with
+            match collision {
+                Collision::Left => {
+                    player_transform.translation.x -= PLAYERSPEED;
+                    println!("Left");
+                }
+                Collision::Right => {
+                    player_transform.translation.x += PLAYERSPEED;
+                    println!("Right");
+                }
+                Collision::Top => {
+                    status.on_ground = true;
+                    println!("Top");
+                }
+                Collision::Bottom => println!("Bottom"),
+                Collision::Inside => status.on_ground = true,
+            }
+
             // Sends a collision event so that other systems can react to the collision
             collision_events.send_default();
-            status.on_ground = true;
         } else {
             status.on_ground = false;
         }
+
         // if the player is on the ground, cancel out the gravity by adding up inverted gravity to existing gravity
         if status.on_ground {
             player_transform.translation.y +=
