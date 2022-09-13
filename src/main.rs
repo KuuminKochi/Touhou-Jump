@@ -235,19 +235,19 @@ fn collision_detection(
 }
 
 fn platform_spawn(mut commands: Commands) {
-    // commands
-    //     .spawn()
-    //     .insert_bundle(SpriteBundle {
-    //         sprite: Sprite {
-    //             color: PLATFORM_COLOR,
-    //             ..default()
-    //         },
-    //         transform: Transform {
-    //             translation: Vec3::new(0., 0., 0.),
-    //             scale: Vec3::new(100., 10., 0.),
-    //             ..default()
-    //         },
-    //         ..default()
-    //     })
-    //     .insert(Ground);
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgb(0.5, 0.5, 0.1),
+                ..default()
+            },
+            transform: Transform {
+                translation: Vec3::new(100., 0., 0.),
+                scale: Vec3::new(100., 30., 0.),
+                ..default()
+            },
+            ..default()
+        })
+        .insert(Collider);
 }
