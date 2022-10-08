@@ -6,9 +6,8 @@ use bevy::{
 
 // System Constant
 const TIME_STEP: f64 = 1. / 60.;
-const TIME_SCALE: f32 = 120.;
 const GRAVITY: f32 = 5.;
-
+const PLAYER_SPEED: f32 = 20.;
 // Entity Constant
 const PLAYERSPEED: f32 = 20.;
 
@@ -51,7 +50,7 @@ fn main() {
     App::new()
         .add_startup_system(setup)
         .add_startup_system(player_spawn)
-        .add_startup_system(platform_spawn)
+        // .add_startup_system(platform_spawn)
         .add_startup_system(ground_spawn)
         .add_startup_system(access_window_system)
         .add_event::<CollisionEvent>()
@@ -72,28 +71,31 @@ fn setup(mut commands: Commands) {
     commands.spawn_bundle(Camera2dBundle::default());
 }
 
+// Create windows related stuffs
 fn access_window_system(mut windows: ResMut<Windows>) {
     for window in windows.iter_mut() {
         window.set_title(String::from("Touhou Jump"));
-        window.set_resolution(1280., 960.);
+        window.set_resolution(480., 480.);
         window.set_resizable(false);
     }
 }
 
+// Spawn the players into the game
 fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn()
         .insert_bundle(SpriteBundle {
-            // texture: asset_server.load(PLAYER_SPRITE),
             sprite: Sprite {
                 color: PLAYER_COLOR,
                 ..default()
             },
+
             transform: Transform {
                 translation: Vec3::new(0.0, 500.0, 0.0),
                 scale: Vec3::new(PLAYER_SIZE_X, PLAYER_SIZE_Y, 0.0),
                 ..default()
             },
+
             ..default()
         })
         .insert(Player)
@@ -108,6 +110,7 @@ fn player_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(Collider);
 }
 
+// Spawns the ground
 fn ground_spawn(mut commands: Commands) {
     commands
         .spawn()
@@ -116,11 +119,13 @@ fn ground_spawn(mut commands: Commands) {
                 color: GROUND_COLOR,
                 ..default()
             },
+
             transform: Transform {
                 translation: Vec3::new(0., -250., 0.),
                 scale: Vec3::new(GROUND_SIZE_X, GROUND_SIZE_Y, 0.),
                 ..default()
             },
+
             ..default()
         })
         .insert(Collider);
@@ -133,10 +138,11 @@ fn player_controller(
 ) {
     for mut transform in player_positions.iter_mut() {
         if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= PLAYERSPEED;
+            transform.translation.x -= PLAYER_SPEED;
         }
+
         if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += PLAYERSPEED;
+            transform.translation.x += PLAYER_SPEED;
         }
     }
 }
@@ -148,30 +154,26 @@ fn jump(
     mut player: Query<(&mut Transform, &mut PlayerStatus), With<Player>>,
     mut jump: Query<&mut JumpDuration, With<Player>>,
 ) {
-    let mut player_velocity: f32 = 20.;
+    let player_velocity: f32 = 50.;
     let mut jump = jump.single_mut();
 
     for (mut transform, mut status) in player.iter_mut() {
+
         if keyboard_input.just_pressed(KeyCode::Up) {
-            // Check whether or not the player is on the ground first, if not
-            // lock Jump. if it is, unlock player jump
             if status.on_ground {
                 status.is_jump = true;
+                status.on_ground = false;
                 jump.time.reset();
             }
         }
 
         if status.is_jump {
-            // Make sure player jump only lasts for 0.2 seconds before descending
             jump.time.tick(time.delta());
-            if jump.time.elapsed_secs() < 0.2 {
-                transform.translation.y +=
-                    player_velocity * time.delta_seconds_f64() as f32 * TIME_SCALE;
-                println!("{}", jump.time.elapsed_secs());
+            
+            if jump.time.elapsed_secs() < 0.3 {
+                transform.translation.y += 10.;
             } else {
                 status.is_jump = false;
-                // Heavier gravity when falling down
-                player_velocity = -10.;
             }
         }
     }
@@ -179,8 +181,7 @@ fn jump(
 
 fn gravity(time: Res<Time>, mut player_positions: Query<&mut Transform, With<Player>>) {
     for mut transform in player_positions.iter_mut() {
-        // Basing the gravity off the frame rate
-        transform.translation.y -= GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
+        transform.translation.y -= GRAVITY;
     }
 }
 
@@ -206,7 +207,6 @@ fn collision_detection(
             match collision {
                 Collision::Left => {
                     player_transform.translation.x -= PLAYERSPEED;
-                    println!("Left");
                 }
                 Collision::Right => {
                     player_transform.translation.x += PLAYERSPEED;
@@ -216,38 +216,33 @@ fn collision_detection(
                     println!("Top");
                     status.on_ground = true;
                 }
-                Collision::Bottom => println!("Bottom"),
-                Collision::Inside => {},
+                Collision::Bottom => {}
+                Collision::Inside => {}
             }
 
-            // Sends a collision event so that other systems can react to the collision
-            collision_events.send_default();
-        } else {
-            status.on_ground = false;
+            // if the player is on the ground, cancel out the gravity by adding up inverted gravity to existing gravity
+            if status.on_ground {
+                player_transform.translation.y += GRAVITY;
+            }
         }
 
-        // if the player is on the ground, cancel out the gravity by adding up inverted gravity to existing gravity
-        if status.on_ground {
-            player_transform.translation.y +=
-                GRAVITY * time.delta_seconds_f64() as f32 * TIME_SCALE;
+        fn platform_spawn(mut commands: Commands) {
+            commands
+                .spawn()
+                .insert_bundle(SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::rgb(0.5, 0.5, 0.1),
+                        ..default()
+                    },
+                    transform: Transform {
+                        translation: Vec3::new(100., 0., 0.),
+                        scale: Vec3::new(100., 30., 0.),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .insert(Collider);
         }
     }
 }
 
-fn platform_spawn(mut commands: Commands) {
-    commands
-        .spawn()
-        .insert_bundle(SpriteBundle {
-            sprite: Sprite {
-                color: Color::rgb(0.5, 0.5, 0.1),
-                ..default()
-            },
-            transform: Transform {
-                translation: Vec3::new(100., 0., 0.),
-                scale: Vec3::new(100., 30., 0.),
-                ..default()
-            },
-            ..default()
-        })
-        .insert(Collider);
-}
